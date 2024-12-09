@@ -1,0 +1,6 @@
+@CNetProjectAPI_HostAddress = http://localhost:5027
+
+GET {{CNetProjectAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

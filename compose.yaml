@@ -1,0 +1,6 @@
+﻿services:
+  cnetprojectapi:
+    image: cnetprojectapi
+    build:
+      context: .
+      dockerfile: CNetProjectAPI/Dockerfile
