@@ -1,6 +1,29 @@
 ﻿services:
-  cnetprojectapi:
+  mysql-db:
+    image: mysql:8.0
+    container_name: mysql-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: api_db
+      MYSQL_USER: api_user
+      MYSQL_PASSWORD: api_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  api:
     image: cnetprojectapi
     build:
       context: .
       dockerfile: CNetProjectAPI/Dockerfile
+    depends_on:
+      - mysql-db
+    environment:
+      - ConnectionStrings__MySqlConnection=Server=mysql-db;Port=3306;Database=api_db;User=api_user;Password=api_password;
+    ports:
+      - "8080:8080"
+
+volumes:
+  mysql_data:

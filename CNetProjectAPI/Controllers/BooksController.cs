@@ -1,5 +1,9 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using CNetProjectAPI.Data;
 
 namespace CNetProjectAPI
 {
@@ -7,78 +11,126 @@ namespace CNetProjectAPI
     [Route("api/[controller]")]
     public class BooksController : ControllerBase
     {
-        // In-memory list to simulate a data source
-        private static readonly List<Book> Books = new List<Book>
+        private readonly ApiDbContext _context;
+
+        // Constructor to inject ApplicationDbContext
+        public BooksController(ApiDbContext context)
         {
-            new Book { Title = "The Great Gatsby", Format = "Hardcover", Author = "F. Scott Fitzgerald", Pages = 180 },
-            new Book { Title = "1984", Format = "Paperback", Author = "George Orwell", Pages = 328 },
-            new Book { Title = "Clean Code", Format = "eBook", Author = "Robert C. Martin", Pages = 464 }
-        };
+            _context = context;
+        }
 
         // GET: api/books
         [HttpGet]
-        public ActionResult<IEnumerable<Book>> GetAllBooks()
+        public async Task<ActionResult<IEnumerable<Book>>> GetAllBooks()
         {
-            return Ok(Books);
+            // Retrieve books from the database asynchronously
+            var books = await _context.Books.ToListAsync();
+            return Ok(books);
         }
 
         // GET: api/books/{title}
         [HttpGet("{title}")]
-        public ActionResult<Book> GetBookByTitle(string title)
+        public async Task<ActionResult<Book>> GetBookByTitle(string title)
         {
-            var book = Books.Find(b => b.Title.Equals(title, System.StringComparison.OrdinalIgnoreCase));
+            var book = await _context.Books
+                                      .FirstOrDefaultAsync(b => b.Title.Equals(title, System.StringComparison.OrdinalIgnoreCase));
+
             if (book == null)
             {
                 return NotFound(new { Message = "Book not found." });
             }
+
             return Ok(book);
         }
 
         // POST: api/books
         [HttpPost]
-        public ActionResult AddBook([FromBody] Book newBook)
+        public async Task<ActionResult<Book>> AddBook([FromBody] Book newBook)
         {
             if (newBook == null || string.IsNullOrEmpty(newBook.Title))
             {
                 return BadRequest(new { Message = "Invalid book data." });
             }
 
-            Books.Add(newBook);
+            // Add the new book to the database
+            _context.Books.Add(newBook);
+            await _context.SaveChangesAsync();
+
             return CreatedAtAction(nameof(GetBookByTitle), new { title = newBook.Title }, newBook);
         }
 
         // DELETE: api/books/{title}
+        // DELETE: api/books/{title}
         [HttpDelete("{title}")]
-        public ActionResult DeleteBook(string title)
+        public async Task<ActionResult> DeleteBook(string title)
         {
-            var book = Books.Find(b => b.Title.Equals(title, System.StringComparison.OrdinalIgnoreCase));
-            if (book == null)
+            try
             {
-                return NotFound(new { Message = "Book not found." });
-            }
+                // Log the incoming request and title
+                Console.WriteLine($"Attempting to delete book with title: {title}");
 
-            Books.Remove(book);
-            return Ok(new { Message = $"Book '{title}' deleted successfully." });
+                // Use ToLower() for case-insensitive comparison
+                var book = await _context.Books
+                    .FirstOrDefaultAsync(b => b.Title.ToLower() == title.ToLower());
+
+                // Debugging message: if book is not found
+                if (book == null)
+                {
+                    Console.WriteLine($"Book with title '{title}' not found in the database.");
+                    return NotFound(new { Message = "Book not found." });
+                }
+
+                // Debugging message: if book is found
+                Console.WriteLine($"Book found: {book.Title}, {book.Author}, {book.Pages} pages.");
+
+                // Attempt to delete the book
+                _context.Books.Remove(book);
+                await _context.SaveChangesAsync();
+
+                // Debugging message: successful deletion
+                Console.WriteLine($"Book '{title}' deleted successfully from the database.");
+
+                return Ok(new { Message = $"Book '{title}' deleted successfully." });
+            }
+            catch (Exception ex)
+            {
+                // Log any unexpected errors
+                Console.WriteLine($"An error occurred while deleting the book: {ex.Message}");
+                return StatusCode(500, new { Message = "An error occurred while deleting the book." });
+            }
         }
-        
+
+
         // PUT: api/books/{title}
         [HttpPut("{title}")]
-        public ActionResult UpdateBook(string title, [FromBody] Book updatedBook)
+        public async Task<ActionResult> UpdateBook(string title, [FromBody] Book updatedBook)
         {
             if (updatedBook == null || string.IsNullOrEmpty(updatedBook.Title))
                 return BadRequest(new { Message = "Invalid book data." });
 
-            var existingBook = Books.Find(b => b.Title.Equals(title, System.StringComparison.OrdinalIgnoreCase));
+            var existingBook = await _context.Books
+                .FirstOrDefaultAsync(b => b.Title.ToLower() == title.ToLower());
+
             if (existingBook == null)
                 return NotFound(new { Message = "Book not found." });
 
-            // Update the existing book details
+            // Update the existing book's details
             existingBook.Title = updatedBook.Title;
-            existingBook.Format = updatedBook.Format;
             existingBook.Author = updatedBook.Author;
+            existingBook.Format = updatedBook.Format;
             existingBook.Pages = updatedBook.Pages;
 
-            return Ok(new { Message = $"Book '{title}' updated successfully.", Book = existingBook });
+            try
+            {
+                await _context.SaveChangesAsync();
+                return Ok(new { Message = $"Book '{title}' updated successfully.", Book = existingBook });
+            }
+            catch (Exception ex)
+            {
+                // Log the error
+                Console.WriteLine($"Error occurred: {ex.Message}");
+                return StatusCode(500, new { Message = "An error occurred while updating the book." });
+            }
         }
     }
 }
